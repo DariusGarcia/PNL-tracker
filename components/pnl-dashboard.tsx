@@ -415,43 +415,59 @@ export function PnlDashboard() {
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-7xl flex-col px-4 py-8 sm:px-6 lg:px-8">
-      {user ? (
-        <div className="mb-4 rounded-2xl border border-white/10 bg-slate-950/40 p-3 md:hidden">
-          <button
-            type="button"
-            onClick={() => setIsMobileAccountMenuOpen((current) => !current)}
-            className="flex w-full items-center justify-between gap-3 text-left"
-          >
-            <div>
-              <p className="text-xs uppercase tracking-[0.24em] text-white/45">
-                Account
-              </p>
-              <p className="mt-1 text-sm font-medium text-white">
-                {user.displayName ?? user.email}
-              </p>
-            </div>
-            <span className="rounded-full border border-white/10 px-3 py-1 text-xs text-white/70">
-              {isMobileAccountMenuOpen ? "Close" : "Open"}
-            </span>
-          </button>
+      <div className="mb-4 md:hidden">
+        {user ? (
+          <div className="rounded-2xl border border-white/10 bg-slate-950/40 p-3">
+            <button
+              type="button"
+              onClick={() => setIsMobileAccountMenuOpen((current) => !current)}
+              className="flex w-full items-center justify-between gap-3 text-left"
+            >
+              <div>
+                <p className="text-xs uppercase tracking-[0.24em] text-white/45">
+                  Account
+                </p>
+                <p className="mt-1 text-sm font-medium text-white">
+                  {user.displayName ?? user.email}
+                </p>
+              </div>
+              <span className="rounded-full border border-white/10 px-3 py-1 text-xs text-white/70">
+                {isMobileAccountMenuOpen ? "Close" : "Open"}
+              </span>
+            </button>
 
-          {isMobileAccountMenuOpen ? (
-            <div className="mt-3 border-t border-white/10 pt-3">
-              <button
-                onClick={() => {
-                  const firebaseAuth = getFirebaseAuth();
-                  if (firebaseAuth) {
-                    void signOut(firebaseAuth);
-                  }
-                }}
-                className="w-full rounded-full border border-white/15 px-4 py-2 text-sm font-medium text-white transition hover:border-white/30 hover:bg-white/5"
-              >
-                Sign out
-              </button>
-            </div>
-          ) : null}
-        </div>
-      ) : null}
+            {isMobileAccountMenuOpen ? (
+              <div className="mt-3 border-t border-white/10 pt-3">
+                <button
+                  onClick={() => {
+                    const firebaseAuth = getFirebaseAuth();
+                    if (firebaseAuth) {
+                      void signOut(firebaseAuth);
+                    }
+                  }}
+                  className="w-full rounded-full border border-white/15 px-4 py-2 text-sm font-medium text-white transition hover:border-white/30 hover:bg-white/5"
+                >
+                  Sign out
+                </button>
+              </div>
+            ) : null}
+          </div>
+        ) : authLoading ? (
+          <div className="rounded-2xl border border-white/10 bg-slate-950/40 p-4 text-center text-sm text-white/70">
+            Checking your session...
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-white/10 bg-slate-950/40 p-3">
+            <button
+              type="button"
+              onClick={handleGoogleSignIn}
+              className="w-full rounded-full bg-white px-5 py-3 text-sm font-semibold text-slate-950 transition hover:scale-[1.01]"
+            >
+              Continue with Google
+            </button>
+          </div>
+        )}
+      </div>
 
       <section className="relative overflow-hidden rounded-[32px] border border-white/10 bg-white/5 p-6 shadow-glow backdrop-blur md:p-10">
         <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(61,213,152,0.08),transparent_35%,rgba(255,107,107,0.08))]" />

@@ -139,6 +139,7 @@ export function PnlDashboard() {
   const [editDate, setEditDate] = useState("");
   const [editNote, setEditNote] = useState("");
   const [isUpdatingEntry, setIsUpdatingEntry] = useState(false);
+  const [isDeletingEntry, setIsDeletingEntry] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [authLoading, setAuthLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -367,7 +368,7 @@ export function PnlDashboard() {
   }
 
   function closeEditModal() {
-    if (isUpdatingEntry) return;
+    if (isUpdatingEntry || isDeletingEntry) return;
     setEditingEntry(null);
     setEditAmount("");
     setEditDate("");
@@ -413,8 +414,62 @@ export function PnlDashboard() {
     }
   }
 
+  async function handleDeleteEntry() {
+    if (!user || !editingEntry) return;
+
+    const confirmed = window.confirm(
+      `Delete the P&L entry for ${dateFormatter.format(
+        new Date(`${editingEntry.date}T00:00:00`)
+      )}?`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    const firebaseDb = getFirebaseDb();
+    if (!firebaseDb) {
+      setError("Firebase is not configured yet. Add your keys to .env.local.");
+      return;
+    }
+
+    setError(null);
+    setIsDeletingEntry(true);
+
+    try {
+      await deleteDoc(doc(firebaseDb, "users", user.uid, "pnlEntries", editingEntry.date));
+      closeEditModal();
+    } catch {
+      setError("Could not delete your P&L entry. Check your Firestore rules and config.");
+    } finally {
+      setIsDeletingEntry(false);
+    }
+  }
+
+  function handleMobileTabChange(tab: MobileTabKey) {
+    setActiveMobileTab(tab);
+  }
+
+  useEffect(() => {
+    if (activeMobileTab !== "analytics") {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      window.scrollTo({
+        top: document.documentElement.scrollHeight,
+        behavior: "smooth",
+      });
+    }, 80);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [activeMobileTab]);
+
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-7xl flex-col px-4 py-8 sm:px-6 lg:px-8">
+    <main
+      id="top"
+      className="mx-auto flex min-h-screen w-full max-w-7xl flex-col px-4 py-8 sm:px-6 lg:px-8"
+    >
       <div className="mb-4 md:hidden">
         {user ? (
           <div className="rounded-2xl border border-white/10 bg-slate-950/40 p-3">
@@ -694,16 +749,45 @@ export function PnlDashboard() {
               <p className="text-sm text-white/60">
                 Filter the cards to a single month while keeping your saved data in Firestore.
               </p>
+              <a
+                href="#desktop-analytics"
+                className="mt-3 hidden text-sm font-medium text-accent transition hover:text-white md:inline-flex"
+              >
+                View analytics
+              </a>
             </div>
-            <label className="block">
-              <span className="mb-2 block text-sm text-white/70">Month</span>
-              <input
-                type="month"
-                value={selectedMonth}
-                onChange={(event) => setSelectedMonth(event.target.value)}
-                className="w-full rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 text-white outline-none transition focus:border-accent sm:min-w-44"
-              />
-            </label>
+            <div className="space-y-3">
+              <div className="hidden items-center justify-end gap-3 md:flex">
+                <button
+                  type="button"
+                  onClick={() => setSelectedMonth(shiftMonth(selectedMonth, -1))}
+                  className="rounded-full border border-white/10 px-3 py-2 text-sm text-white/75 transition hover:border-white/20 hover:bg-white/5"
+                  aria-label="Previous month"
+                >
+                  {"<"}
+                </button>
+                <p className="min-w-40 text-center text-sm font-semibold text-white">
+                  {getMonthLabel(selectedMonth)}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setSelectedMonth(shiftMonth(selectedMonth, 1))}
+                  className="rounded-full border border-white/10 px-3 py-2 text-sm text-white/75 transition hover:border-white/20 hover:bg-white/5"
+                  aria-label="Next month"
+                >
+                  {">"}
+                </button>
+              </div>
+              <label className="block">
+                <span className="mb-2 block text-sm text-white/70">Month</span>
+                <input
+                  type="month"
+                  value={selectedMonth}
+                  onChange={(event) => setSelectedMonth(event.target.value)}
+                  className="w-full rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 text-white outline-none transition focus:border-accent sm:min-w-44"
+                />
+              </label>
+            </div>
           </div>
 
           {!user ? (
@@ -910,11 +994,97 @@ export function PnlDashboard() {
         </div>
       </section>
 
+      <section id="desktop-analytics" className="mt-8 hidden md:block">
+        <div className="mb-4 flex items-end justify-between gap-4">
+          <div>
+            <h2 className="text-xl font-semibold">Analytics</h2>
+            <p className="text-sm text-white/60">
+              A quick read on your trading performance across all saved entries.
+            </p>
+          </div>
+          <a
+            href="#top"
+            className="text-sm font-medium text-white/60 transition hover:text-white"
+          >
+            Back to top
+          </a>
+        </div>
+
+        <div className="grid gap-4 lg:grid-cols-[2fr,1fr]">
+          <div className="grid grid-cols-2 gap-4 xl:grid-cols-3">
+            <AnalyticsCard
+              label="Win rate"
+              value={`${analytics.winRate.toFixed(0)}%`}
+            />
+            <AnalyticsCard
+              label="Trading days"
+              value={String(analytics.totalDays)}
+            />
+            <AnalyticsCard
+              label="Avg day"
+              value={moneyFormatter.format(analytics.averageDaily)}
+              tone={analytics.averageDaily >= 0 ? "profit" : "loss"}
+            />
+            <AnalyticsCard
+              label="Avg win"
+              value={moneyFormatter.format(analytics.averageWin)}
+              tone="profit"
+            />
+            <AnalyticsCard
+              label="Avg loss"
+              value={moneyFormatter.format(analytics.averageLoss)}
+              tone="loss"
+            />
+            <AnalyticsCard
+              label="Best day"
+              value={
+                analytics.bestDay
+                  ? moneyFormatter.format(analytics.bestDay.amount)
+                  : "$0.00"
+              }
+              tone="profit"
+            />
+          </div>
+
+          <div className="rounded-[28px] border border-white/10 bg-white/[0.04] p-5">
+            <p className="text-sm text-white/55">Performance notes</p>
+            <div className="mt-4 space-y-3 text-sm text-white/75">
+              <div className="flex items-center justify-between gap-4">
+                <span>Worst day</span>
+                <span className="font-semibold text-loss">
+                  {analytics.worstDay
+                    ? moneyFormatter.format(analytics.worstDay.amount)
+                    : "$0.00"}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-4">
+                <span>Longest win streak</span>
+                <span className="font-semibold">{analytics.longestWinStreak}</span>
+              </div>
+              <div className="flex items-center justify-between gap-4">
+                <span>Longest loss streak</span>
+                <span className="font-semibold">{analytics.longestLossStreak}</span>
+              </div>
+              <div className="flex items-center justify-between gap-4">
+                <span>Best day date</span>
+                <span className="font-semibold">
+                  {analytics.bestDay
+                    ? dateFormatter.format(
+                        new Date(`${analytics.bestDay.date}T00:00:00`)
+                      )
+                    : "-"}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <nav className="sticky bottom-3 z-20 mt-8 md:hidden">
         <div className="grid grid-cols-3 rounded-[28px] border border-white/10 bg-[#18251c]/95 p-2 shadow-glow backdrop-blur">
           <button
             type="button"
-            onClick={() => setActiveMobileTab("calendar")}
+            onClick={() => handleMobileTabChange("calendar")}
             className={`rounded-2xl px-3 py-3 text-center text-sm font-medium ${
               activeMobileTab === "calendar"
                 ? "bg-white/10 text-white"
@@ -925,7 +1095,7 @@ export function PnlDashboard() {
           </button>
           <button
             type="button"
-            onClick={() => setActiveMobileTab("analytics")}
+            onClick={() => handleMobileTabChange("analytics")}
             className={`rounded-2xl px-3 py-3 text-center text-sm font-medium ${
               activeMobileTab === "analytics"
                 ? "bg-white/10 text-white"
@@ -936,7 +1106,7 @@ export function PnlDashboard() {
           </button>
           <button
             type="button"
-            onClick={() => setActiveMobileTab("settings")}
+            onClick={() => handleMobileTabChange("settings")}
             className={`rounded-2xl px-3 py-3 text-center text-sm font-medium ${
               activeMobileTab === "settings"
                 ? "bg-white/10 text-white"
@@ -963,6 +1133,7 @@ export function PnlDashboard() {
               <button
                 type="button"
                 onClick={closeEditModal}
+                disabled={isUpdatingEntry || isDeletingEntry}
                 className="rounded-full border border-white/10 px-3 py-1 text-sm text-white/70"
               >
                 Close
@@ -976,7 +1147,7 @@ export function PnlDashboard() {
                   type="date"
                   value={editDate}
                   onChange={(event) => setEditDate(event.target.value)}
-                  disabled={isUpdatingEntry}
+                  disabled={isUpdatingEntry || isDeletingEntry}
                   className="w-full rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 text-white outline-none transition focus:border-accent disabled:cursor-not-allowed disabled:opacity-60"
                 />
               </label>
@@ -988,7 +1159,7 @@ export function PnlDashboard() {
                   step="0.01"
                   value={editAmount}
                   onChange={(event) => setEditAmount(event.target.value)}
-                  disabled={isUpdatingEntry}
+                  disabled={isUpdatingEntry || isDeletingEntry}
                   className="w-full rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 text-white outline-none transition focus:border-accent disabled:cursor-not-allowed disabled:opacity-60"
                 />
               </label>
@@ -999,18 +1170,28 @@ export function PnlDashboard() {
                   rows={3}
                   value={editNote}
                   onChange={(event) => setEditNote(event.target.value)}
-                  disabled={isUpdatingEntry}
+                  disabled={isUpdatingEntry || isDeletingEntry}
                   className="w-full rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 text-white outline-none transition focus:border-accent disabled:cursor-not-allowed disabled:opacity-60"
                 />
               </label>
 
-              <button
-                type="submit"
-                disabled={isUpdatingEntry}
-                className="w-full rounded-full bg-accent px-5 py-3 text-sm font-semibold text-slate-950 transition hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {isUpdatingEntry ? "Saving changes..." : "Save changes"}
-              </button>
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <button
+                  type="button"
+                  onClick={handleDeleteEntry}
+                  disabled={isUpdatingEntry || isDeletingEntry}
+                  className="w-full rounded-full border border-loss/40 bg-loss/10 px-5 py-3 text-sm font-semibold text-loss transition hover:bg-loss/15 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isDeletingEntry ? "Deleting..." : "Delete entry"}
+                </button>
+                <button
+                  type="submit"
+                  disabled={isUpdatingEntry || isDeletingEntry}
+                  className="w-full rounded-full bg-accent px-5 py-3 text-sm font-semibold text-slate-950 transition hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isUpdatingEntry ? "Saving changes..." : "Save changes"}
+                </button>
+              </div>
             </form>
           </div>
         </div>
